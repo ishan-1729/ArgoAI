@@ -318,8 +318,8 @@ func (h *Handler) collectSignals(ctx context.Context, appName, appNamespace stri
 		signals["podStatuses"] = podStatuses
 	}
 
-	// If app is Degraded/Unhealthy and there's a non-running pod, fetch its logs
-	if (healthStatus == "Degraded" || healthStatus == "Missing" || healthStatus == "Unknown") && firstUnhealthyPod != "" {
+	// If app is unhealthy or still progressing with a non-running pod, fetch its logs.
+	if (healthStatus == "Degraded" || healthStatus == "Missing" || healthStatus == "Unknown" || healthStatus == "Progressing") && firstUnhealthyPod != "" {
 		logs := h.fetchPodLogs(ctx, destNS, firstUnhealthyPod, 100)
 		if logs != "" {
 			signals["preloadedLogs"] = map[string]string{

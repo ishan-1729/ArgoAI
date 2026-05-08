@@ -26,7 +26,7 @@ echo ""
 # Deploy each broken app
 echo "1. Deploying OOMKilled demo (triggers Runtime Analyzer)..."
 oc apply -f oomkilled/deployment.yaml -n $NAMESPACE
-echo "   -> Container requests 256MB but limited to 64MB - will be OOMKilled"
+echo "   -> Container allocates 256MB but is limited to 64MB - will be OOMKilled"
 echo ""
 
 echo "2. Deploying ImagePullBackOff demo (triggers Runtime Analyzer)..."
@@ -34,7 +34,7 @@ oc apply -f imagepull/deployment.yaml -n $NAMESPACE
 echo "   -> Uses nonexistent image tag - will fail to pull"
 echo ""
 
-echo "3. Deploying Missing ConfigMap demo (triggers Runtime Analyzer)..."
+echo "3. Deploying Missing ConfigMap demo (triggers Config Analyzer)..."
 oc apply -f missing-config/deployment.yaml -n $NAMESPACE
 echo "   -> References nonexistent ConfigMap - CreateContainerConfigError"
 echo ""
@@ -56,7 +56,7 @@ echo ""
 
 echo "7. Deploying RBAC Issue demo (triggers RBAC Analyzer)..."
 oc apply -f rbac-issue/deployment.yaml -n $NAMESPACE
-echo "   -> ServiceAccount lacks permissions - Forbidden errors"
+echo "   -> ServiceAccount lacks permission to list secrets - Forbidden logs + CrashLoopBackOff"
 echo ""
 
 echo "=========================================="
@@ -75,5 +75,5 @@ echo "  - demo-missing-config:  CreateContainerConfigError"
 echo "  - demo-crashloop:       CrashLoopBackOff"
 echo "  - demo-network-issue:   Running but Unhealthy (probe failures)"
 echo "  - demo-storage-issue:   Pending (PVC not bound)"
-echo "  - demo-rbac-issue:      Running (but logs show Forbidden errors)"
+echo "  - demo-rbac-issue:      CrashLoopBackOff with Forbidden RBAC logs"
 echo ""

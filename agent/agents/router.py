@@ -141,6 +141,20 @@ class AgentCardRouter:
         # Pod-state matches are the most reliable (scoped to the app's pods)
         # Prefer them over event-based matches which may include namespace noise
         if pod_state_matches:
+            strong_non_runtime_matches = [
+                (agent_id, reason)
+                for agent_id, reason in matches
+                if agent_id != "runtime"
+                and not reason.startswith("Health status")
+                and not reason.startswith("Sync status")
+            ]
+            if strong_non_runtime_matches:
+                agent_id, reason = self._select_by_priority(strong_non_runtime_matches + pod_state_matches)
+                self._cache_route(signals, agent_id, reason)
+                prom_metrics.TRIAGE_DECISIONS.labels(agent=agent_id, method="pod_state_priority").inc()
+                prom_metrics.TRIAGE_DURATION.labels(method="pod_state_priority").observe(time.time() - start_time)
+                return agent_id, f"[priority] {reason}", True
+
             if len(pod_state_matches) == 1:
                 agent_id, reason = pod_state_matches[0]
             else:

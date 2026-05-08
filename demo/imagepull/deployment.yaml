@@ -15,4 +15,4 @@ spec:
     spec:
       containers:
         - name: bad-image
-          image: nginx:this-tag-does-not-exist-12345
+          image: registry.access.redhat.com/ubi9/ubi-minimal:this-tag-does-not-exist-12345

@@ -44,7 +44,7 @@ Recommended: run the project commands from Git Bash, WSL, or another Bash-compat
 4. Log into OpenShift:
 
    ```powershell
-   oc login <cluster-api-url> --username <username> --password <password>
+   oc login <cluster-api-url>
    oc whoami
    ```
 
@@ -90,7 +90,7 @@ Recommended: run the project commands from Git Bash, WSL, or another Bash-compat
 4. Log into OpenShift:
 
    ```bash
-   oc login <cluster-api-url> --username <username> --password <password>
+   oc login <cluster-api-url>
    oc whoami
    ```
 
@@ -105,6 +105,26 @@ Recommended: run the project commands from Git Bash, WSL, or another Bash-compat
    ```text
    http://localhost:9000/argoai
    ```
+
+## What Setup Does
+
+`setup-demo.sh` verifies the cluster login, installs/checks OpenShift GitOps, deploys seven intentionally broken demo apps, creates ArgoCD Application CRs, starts the Go service, starts the Python agent, starts the console plugins, and opens the local console stack on `localhost:9000`.
+
+By default, the demo ArgoCD Applications point at `https://github.com/tzprograms/ArgoAI` with paths under `demo/`. For a fork, set `ARGOAI_DEMO_REPO_URL`, `ARGOAI_DEMO_TARGET_REVISION`, and optionally `ARGOAI_DEMO_PATH_PREFIX` before running `setup-demo.sh`.
+
+## Demo Scenarios
+
+Non-image-pull scenarios use public Red Hat registry images so Docker Hub rate limits do not mask the intended failure mode.
+
+| App | Failure Mode | Expected Agent |
+|-----|--------------|----------------|
+| `demo-oomkilled` | Allocates 256MB with a 64Mi limit, producing OOMKilled or CrashLoopBackOff | Runtime Analyzer |
+| `demo-imagepull` | Nonexistent image tag, producing ImagePullBackOff | Runtime Analyzer |
+| `demo-crashloop` | App exits with code 1 after a simulated DB connection failure | Runtime Analyzer |
+| `demo-missing-config` | References a nonexistent ConfigMap, producing CreateContainerConfigError | Config Analyzer |
+| `demo-network-issue` | Probe targets an unused port, producing readiness/liveness failures | Network Analyzer |
+| `demo-storage-issue` | PVC references a nonexistent StorageClass, leaving the pod Pending | Storage Analyzer |
+| `demo-rbac-issue` | Restricted ServiceAccount tries to list Secrets, producing Forbidden logs and CrashLoopBackOff | RBAC Analyzer |
 
 ## Verify It Works
 

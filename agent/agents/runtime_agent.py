@@ -2,7 +2,7 @@
 #
 # Specializes in diagnosing pod/container runtime issues:
 # - OOMKilled, CrashLoopBackOff, ImagePullBackOff
-# - Container creation errors, scheduling failures
+# - Runtime container errors, scheduling failures
 # - Resource constraints, health probe failures
 
 from agent.agents.base import AgentCard, AgentSkill
@@ -23,7 +23,7 @@ RUNTIME_AGENT_CARD = AgentCard(
                 "OOMKilled - container exceeded memory limits",
                 "CrashLoopBackOff - application crashing repeatedly",
                 "ImagePullBackOff - cannot pull container image",
-                "CreateContainerError - container spec invalid",
+                "CreateContainerError - container runtime spec invalid",
                 "FailedScheduling - no nodes with enough resources",
             ]
         ),
@@ -40,13 +40,13 @@ RUNTIME_AGENT_CARD = AgentCard(
         "OOMKilled", "CrashLoopBackOff", "BackOff", 
         "ImagePullBackOff", "ErrImagePull", "ErrImageNeverPull",
         "Failed", "FailedScheduling",  # FailedMount is in Storage agent
-        "CreateContainerError", "CreateContainerConfigError",
+        "CreateContainerError",
         "Killing", "Evicted", "Preempted",
     ],
     trigger_keywords=[
         "oom", "killed", "crash", "backoff", "image", "pull",
         "container", "memory", "cpu", "resource", "limit",
-        "exit code", "configmap not found", "secret not found",
+        "exit code",
         "restart", "terminated", "failed to start",
     ],
     health_conditions=["Degraded", "Missing"],
@@ -86,10 +86,6 @@ CrashLoopBackOff:
 - Check exit code: 1=app error, 137=OOM, 139=segfault, 143=SIGTERM.
 - If logs are pre-loaded, look for startup errors, missing env vars, or config issues.
 - If logs are NOT pre-loaded, call get_pod_logs with previous=true for the crashed container.
-
-CreateContainerConfigError:
-- Extract the missing ConfigMap or Secret name from the error message.
-- Common cause: workload references a resource that doesn't exist in the namespace.
 
 FailedScheduling:
 - Check if due to resource constraints (CPU/memory) or unbound PVCs.

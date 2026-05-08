@@ -41,11 +41,13 @@ CONFIG_AGENT_CARD = AgentCard(
     trigger_event_reasons=[
         "SyncError", "ComparisonError", "InvalidSpecError",
         "OperationError", "ResourceNotFound", "HookError",
+        "CreateContainerConfigError",
     ],
     trigger_keywords=[
-        "sync", "git", "helm", "kustomize", "manifest",
-        "render", "template", "values", "chart", "base",
+        "sync", "git", "helm", "kustomize",
+        "render", "template", "values", "chart",
         "overlay", "patch", "drift", "desired state",
+        "configmap not found", "secret not found",
     ],
     health_conditions=[],
     sync_conditions=["OutOfSync", "Unknown"],

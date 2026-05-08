@@ -15,12 +15,12 @@ spec:
     spec:
       containers:
         - name: curl-loop
-          image: curlimages/curl:latest
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
           command: ["/bin/sh", "-c"]
           args:
             - |
               while true; do
-                curl -s --connect-timeout 2 http://nonexistent-service.default.svc.cluster.local:8080 || echo "Connection failed"
+                echo "Simulating app process; no listener is exposed on port 8080"
                 sleep 5
               done
           readinessProbe:

@@ -28,7 +28,12 @@ spec:
     spec:
       containers:
         - name: app
-          image: nginx:latest
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "Waiting for PVC to bind..."
+              sleep 3600
           volumeMounts:
             - name: data
               mountPath: /data

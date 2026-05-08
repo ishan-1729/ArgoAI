@@ -11,6 +11,8 @@ metadata:
   namespace: default
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: demo-rbac-issue
@@ -21,15 +23,17 @@ spec:
     spec:
       serviceAccountName: demo-restricted-sa
       containers:
-        - name: kubectl
-          image: bitnami/kubectl:latest
+        - name: rbac-check
+          image: registry.access.redhat.com/ubi9/ubi:latest
           command: ["/bin/sh", "-c"]
           args:
             - |
-              while true; do
-                echo "Attempting to list secrets (should fail)..."
-                kubectl get secrets -n kube-system 2>&1 || true
-                echo "Attempting to list nodes (should fail)..."
-                kubectl get nodes 2>&1 || true
-                sleep 10
-              done
+              TOKEN="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+              CACERT="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+              echo "Attempting to list secrets with restricted service account..."
+              curl -sS --cacert "$CACERT" \
+                -H "Authorization: Bearer $TOKEN" \
+                https://kubernetes.default.svc/api/v1/namespaces/default/secrets
+              echo ""
+              echo "Expected RBAC forbidden response received; exiting to preserve logs."
+              exit 1

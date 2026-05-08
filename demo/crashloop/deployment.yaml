@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: crash
-          image: busybox:latest
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
           command: ["/bin/sh", "-c"]
           args:
             - |

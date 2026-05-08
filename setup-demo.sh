@@ -95,12 +95,19 @@ oc apply -f demo/oomkilled/deployment.yaml \
          -f demo/imagepull/deployment.yaml \
          -f demo/crashloop/deployment.yaml \
          -f demo/missing-config/deployment.yaml \
-         -f demo/network-issue/deployment.yaml 2>&1 | sed 's/^/  /'
+         -f demo/network-issue/deployment.yaml \
+         -f demo/storage-issue/deployment.yaml \
+         -f demo/rbac-issue/deployment.yaml 2>&1 | sed 's/^/  /'
 
 # Create ArgoCD Application CRs
 log "Creating ArgoCD Application CRs..."
-for app in demo-oomkilled demo-imagepull demo-crashloop demo-missing-config demo-network-issue; do
+ARGOAI_DEMO_REPO_URL="${ARGOAI_DEMO_REPO_URL:-https://github.com/tzprograms/ArgoAI}"
+ARGOAI_DEMO_TARGET_REVISION="${ARGOAI_DEMO_TARGET_REVISION:-HEAD}"
+ARGOAI_DEMO_PATH_PREFIX="${ARGOAI_DEMO_PATH_PREFIX:-demo}"
+
+for app in demo-oomkilled demo-imagepull demo-crashloop demo-missing-config demo-network-issue demo-storage-issue demo-rbac-issue; do
     path="${app#demo-}"
+    source_path="${ARGOAI_DEMO_PATH_PREFIX:+${ARGOAI_DEMO_PATH_PREFIX}/}${path}"
     cat <<APPEOF | oc apply -f - 2>/dev/null
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -113,9 +120,9 @@ spec:
     server: https://kubernetes.default.svc
     namespace: default
   source:
-    repoURL: https://github.com/placeholder/argoagent-demos.git
-    path: ${path}
-    targetRevision: HEAD
+    repoURL: ${ARGOAI_DEMO_REPO_URL}
+    path: ${source_path}
+    targetRevision: ${ARGOAI_DEMO_TARGET_REVISION}
 APPEOF
     echo "  application.argoproj.io/${app} created"
 done

@@ -15,8 +15,16 @@ spec:
     spec:
       containers:
         - name: stress
-          image: polinux/stress
-          command: ["stress", "--vm", "1", "--vm-bytes", "256M"]
+          image: registry.access.redhat.com/ubi9/ubi:latest
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              echo "Allocating memory beyond the 64Mi container limit..."
+              x="$(head -c 256M /dev/zero | tr '\000' 'A')"
+              echo "Allocated ${#x} bytes"
+              sleep 3600
           resources:
+            requests:
+              memory: "32Mi"
             limits:
               memory: "64Mi"

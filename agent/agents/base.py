@@ -78,6 +78,13 @@ class AgentCard:
             for key in ('stateReason', 'lastTerminatedReason'):
                 if ps.get(key):
                     all_text_parts.append(ps[key])
+        preloaded_logs = signals.get('preloadedLogs') or {}
+        if isinstance(preloaded_logs, dict):
+            log_content = preloaded_logs.get('logs')
+            if log_content:
+                all_text_parts.append(str(log_content))
+        elif isinstance(preloaded_logs, str):
+            all_text_parts.append(preloaded_logs)
         all_text = ' '.join(all_text_parts).lower()
 
         for kw in self.trigger_keywords:
