@@ -9,7 +9,10 @@ build/
 
 # Go
 bin/
-server
+/server
+!cmd/
+!cmd/server/
+!cmd/server/**
 
 # Node / Console Plugin
 node_modules/

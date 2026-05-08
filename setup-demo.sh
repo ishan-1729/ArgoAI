@@ -14,6 +14,12 @@ cd "$SCRIPT_DIR"
 NO_CONSOLE=false
 [[ "${1:-}" == "--no-console" ]] && NO_CONSOLE=true
 
+GO_PID=""
+PYTHON_PID=""
+PLUGIN_PID=""
+GITOPS_PLUGIN_PID=""
+CONSOLE_PID=""
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -27,7 +33,11 @@ info() { echo -e "${CYAN}[ArgoAI]${NC} $1"; }
 
 cleanup() {
     log "Shutting down services..."
-    kill $GO_PID $PYTHON_PID $PLUGIN_PID $GITOPS_PLUGIN_PID $CONSOLE_PID 2>/dev/null || true
+    for pid in "$GO_PID" "$PYTHON_PID" "$PLUGIN_PID" "$GITOPS_PLUGIN_PID" "$CONSOLE_PID"; do
+        if [ -n "${pid:-}" ]; then
+            kill "$pid" 2>/dev/null || true
+        fi
+    done
     wait 2>/dev/null || true
     log "Done."
 }
@@ -120,7 +130,16 @@ oc get pods -n default --no-headers 2>&1 | grep demo- | sed 's/^/  /'
 # ============================================================
 if [ ! -d "rag_data/vector_db" ]; then
     log "Step 4: Extracting RAG data..."
-    make extract-rag
+    mkdir -p rag_data
+    if command -v docker >/dev/null 2>&1; then
+        CONTAINER_RUNTIME=${CONTAINER_RUNTIME:-docker}
+    elif command -v podman >/dev/null 2>&1; then
+        CONTAINER_RUNTIME=${CONTAINER_RUNTIME:-podman}
+    else
+        err "Neither docker nor podman is available for RAG extraction."
+        exit 1
+    fi
+    "${CONTAINER_RUNTIME}" run --rm -v "${SCRIPT_DIR}/rag_data:/out" "${RAG_IMAGE:-quay.io/devtools_gitops/argocd_lightspeed_byok:v0.0.4}" cp -r /rag/vector_db /out/
 else
     log "Step 4: RAG data already present, skipping extraction."
 fi
@@ -165,7 +184,11 @@ done
 echo ""
 
 if curl -s http://localhost:8081/health | grep -q "ok"; then
-    RAG_STATUS=$(curl -s http://localhost:8081/health | python3 -c "import sys,json; print(json.load(sys.stdin).get('rag_loaded', False))" 2>/dev/null || echo "unknown")
+    PYTHON_JSON_BIN="${PYTHON_JSON_BIN:-python3}"
+    if ! command -v "$PYTHON_JSON_BIN" >/dev/null 2>&1; then
+        PYTHON_JSON_BIN="python"
+    fi
+    RAG_STATUS=$(curl -s http://localhost:8081/health | "$PYTHON_JSON_BIN" -c "import sys,json; print(json.load(sys.stdin).get('rag_loaded', False))" 2>/dev/null || echo "unknown")
     log "Python service is healthy. RAG loaded: ${RAG_STATUS}"
 else
     err "Python service failed to start."
@@ -175,10 +198,6 @@ fi
 # ============================================================
 # Step 7: Console plugin (optional)
 # ============================================================
-PLUGIN_PID=""
-GITOPS_PLUGIN_PID=""
-CONSOLE_PID=""
-
 if [ "$NO_CONSOLE" = false ]; then
     log "Step 7: Starting console plugins..."
 
@@ -186,7 +205,7 @@ if [ "$NO_CONSOLE" = false ]; then
     if [ ! -d "console-plugin/node_modules" ]; then
         (cd console-plugin && yarn install 2>&1 | tail -1)
     fi
-    if [ ! -d "gitops-console-plugin/node_modules" ]; then
+    if [ -d "gitops-console-plugin" ] && [ ! -d "gitops-console-plugin/node_modules" ]; then
         (cd gitops-console-plugin && yarn install 2>&1 | tail -1)
     fi
 
@@ -194,9 +213,13 @@ if [ "$NO_CONSOLE" = false ]; then
     (cd console-plugin && yarn start 2>/dev/null) &
     PLUGIN_PID=$!
 
-    # Start GitOps plugin on 9002
-    (cd gitops-console-plugin && PORT=9002 yarn start --port 9002 2>/dev/null) &
-    GITOPS_PLUGIN_PID=$!
+    if [ -d "gitops-console-plugin" ]; then
+        # Start GitOps plugin on 9002 when the optional plugin checkout is present.
+        (cd gitops-console-plugin && PORT=9002 yarn start --port 9002 2>/dev/null) &
+        GITOPS_PLUGIN_PID=$!
+    else
+        warn "gitops-console-plugin directory not found; starting only the ArgoAI console plugin."
+    fi
 
     log "Waiting for plugin servers to compile..."
     sleep 15

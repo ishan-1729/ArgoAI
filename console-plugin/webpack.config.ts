@@ -51,6 +51,12 @@ const config = {
   devServer: {
     port: 9001,
     allowedHosts: 'all',
+    client: {
+      overlay: {
+        errors: true,
+        warnings: false,
+      },
+    },
     static: path.join(__dirname, 'dist'),
     headers: {
       'Access-Control-Allow-Origin': '*',

@@ -1,6 +1,7 @@
 .PHONY: all build-go build-agent run-go run-agent run docker-build docker-up docker-down demo-apps extract-rag clean
 
 RAG_IMAGE ?= quay.io/devtools_gitops/argocd_lightspeed_byok:v0.0.4
+CONTAINER_RUNTIME ?= $(shell if command -v docker >/dev/null 2>&1; then echo docker; elif command -v podman >/dev/null 2>&1; then echo podman; else echo docker; fi)
 
 # --- Local Development ---
 
@@ -24,39 +25,39 @@ run: ## Run both services locally (use two terminals)
 extract-rag:
 	@echo "Extracting RAG data from $(RAG_IMAGE)..."
 	@mkdir -p rag_data
-	docker run --rm -v $(PWD)/rag_data:/out $(RAG_IMAGE) cp -r /rag/vector_db /out/
+	$(CONTAINER_RUNTIME) run --rm -v $(PWD)/rag_data:/out $(RAG_IMAGE) cp -r /rag/vector_db /out/
 	@echo "RAG data extracted to ./rag_data/vector_db"
 	@ls -la rag_data/vector_db
 
 # --- Docker ---
 
 docker-build:
-	docker build -f Dockerfile.server -t argocd-agent-go:latest .
-	docker build -f Dockerfile.agent -t argocd-agent-python:latest .
+	$(CONTAINER_RUNTIME) build -f Dockerfile.server -t argocd-agent-go:latest .
+	$(CONTAINER_RUNTIME) build -f Dockerfile.agent -t argocd-agent-python:latest .
 
 docker-build-go:
-	docker build -f Dockerfile.server -t argocd-agent-go:latest .
+	$(CONTAINER_RUNTIME) build -f Dockerfile.server -t argocd-agent-go:latest .
 
 docker-build-agent:
-	docker build -f Dockerfile.agent -t argocd-agent-python:latest .
+	$(CONTAINER_RUNTIME) build -f Dockerfile.agent -t argocd-agent-python:latest .
 
 # Push to Quay (update registry as needed)
 REGISTRY ?= quay.io/devtools_gitops
 
 docker-push: docker-build
-	docker tag argocd-agent-go:latest $(REGISTRY)/argocd-agent-go:latest
-	docker tag argocd-agent-python:latest $(REGISTRY)/argocd-agent-python:latest
-	docker push $(REGISTRY)/argocd-agent-go:latest
-	docker push $(REGISTRY)/argocd-agent-python:latest
+	$(CONTAINER_RUNTIME) tag argocd-agent-go:latest $(REGISTRY)/argocd-agent-go:latest
+	$(CONTAINER_RUNTIME) tag argocd-agent-python:latest $(REGISTRY)/argocd-agent-python:latest
+	$(CONTAINER_RUNTIME) push $(REGISTRY)/argocd-agent-go:latest
+	$(CONTAINER_RUNTIME) push $(REGISTRY)/argocd-agent-python:latest
 
 docker-up: extract-rag docker-build
-	docker compose up -d
+	$(CONTAINER_RUNTIME) compose up -d
 
 docker-down:
-	docker compose down
+	$(CONTAINER_RUNTIME) compose down
 
 docker-logs:
-	docker compose logs -f
+	$(CONTAINER_RUNTIME) compose logs -f
 
 # --- K8s Deployment ---
 
@@ -113,4 +114,4 @@ demo-clean:
 
 clean:
 	rm -rf bin/ rag_data/
-	docker compose down -v
+	$(CONTAINER_RUNTIME) compose down -v
