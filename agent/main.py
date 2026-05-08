@@ -39,14 +39,17 @@ def _init_rag():
         try:
             from agent.rag.retriever import RAGRetriever
             import agent.rag.retriever as ret_module
+            import agent.tools.rag_tools as rag_tools
 
-            ret_module.retriever_instance = RAGRetriever(index_path=RAG_INDEX_PATH)
-            if ret_module.retriever_instance.is_loaded():
+            retriever = RAGRetriever(index_path=RAG_INDEX_PATH)
+            ret_module.retriever_instance = retriever
+            rag_tools.retriever_instance = retriever
+            if retriever.is_loaded():
                 logger.info(f"RAG retriever loaded from {RAG_INDEX_PATH}")
                 _rag_loaded = True
                 prom_metrics.RAG_LOADED.set(1)
-                if ret_module.retriever_instance._index is not None:
-                    prom_metrics.RAG_INDEX_SIZE.set(ret_module.retriever_instance._index.ntotal)
+                if retriever._index is not None:
+                    prom_metrics.RAG_INDEX_SIZE.set(retriever._index.ntotal)
             else:
                 logger.warning(f"RAG index at {RAG_INDEX_PATH} could not be loaded")
                 prom_metrics.RAG_LOADED.set(0)
