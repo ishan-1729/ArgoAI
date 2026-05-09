@@ -5,20 +5,20 @@ ArgoAI is an OpenShift console plugin and API service that diagnoses broken Argo
 ## What You Need
 
 - An OpenShift or ROSA cluster with `cluster-admin` access.
-- `oc` logged into that cluster.
-- Git, Go, Python/uv, Node.js, Yarn, and Docker or Podman.
+- `oc` logged into that cluster, or an `oc login ...` command ready to paste into the macOS launcher.
+- Git, Go, Python/uv, Node.js, Yarn, and Docker or Podman. The macOS launcher can install missing local tools automatically.
 - A Gemini and/or OpenRouter API key for live LLM tests.
 
 Do not commit API keys, cluster passwords, kubeconfigs, or generated runtime logs.
 
 ## Quick Start
 
-After installing prerequisites and running `oc login`, use the one-click launcher for your OS:
+Use the one-click launcher for your OS:
 
 - Windows: double-click `start-windows.cmd`.
 - macOS: double-click `start-mac.command`, or run `chmod +x start-mac.command` once if macOS asks for permission.
 
-The launcher clones the Red Hat GitOps console plugin next to this repo if it is missing, starts the demo stack, waits for the local console, and opens `http://localhost:9000/argoai` in your browser.
+The launcher clones the Red Hat GitOps console plugin next to this repo if it is missing, starts the demo stack, waits for the local console, and opens `http://localhost:9000/argoai` in your browser. On macOS, the launcher also installs missing local tools with Homebrew and prompts for `oc login` if you are not already logged into a cluster.
 
 ## Windows
 
@@ -72,50 +72,46 @@ Recommended: run the project commands from Git Bash, WSL, or another Bash-compat
 
 ## macOS
 
-1. Install prerequisites:
-
-   ```bash
-   brew install git go node uv podman openshift-cli
-   npm install -g yarn
-   ```
-
-   You can use Docker Desktop instead of Podman if preferred.
-
-2. Start your container runtime:
-
-   ```bash
-   podman machine init 2>/dev/null || true
-   podman machine start 2>/dev/null || true
-   ```
-
-   Skip this if Docker Desktop is already running. If Podman says the VM already exists or is already running, that is fine.
-
-3. Clone and enter the repo:
+1. Clone and enter the repo:
 
    ```bash
    git clone https://github.com/ishan-1729/ArgoAI.git
-   git clone https://github.com/redhat-developer/gitops-console-plugin.git
    cd ArgoAI
    ```
 
-4. Log into OpenShift:
+2. Run the one-click launcher:
 
    ```bash
-   oc login <cluster-api-url>
-   oc whoami
+   ./start-mac.command
    ```
 
-5. Run the setup script:
+   The launcher checks for Git, Bash, Go, Node.js, Yarn, uv, OpenShift CLI, and a container runtime. Missing tools are installed through Homebrew. If Homebrew itself is missing, the launcher installs Homebrew first.
+
+3. Log into OpenShift when prompted:
 
    ```bash
-   bash ./setup-demo.sh
+   oc login <cluster-api-url> --username cluster-admin --password <password>
    ```
 
-6. Open the UI:
+4. Open the UI:
 
    ```text
    http://localhost:9000/argoai
    ```
+
+Manual setup is still available if you prefer to install tools yourself:
+
+```bash
+brew install git bash go node uv podman openshift-cli
+npm install -g yarn
+podman machine init 2>/dev/null || true
+podman machine start 2>/dev/null || true
+git clone https://github.com/redhat-developer/gitops-console-plugin.git ../gitops-console-plugin
+oc login <cluster-api-url>
+bash ./setup-demo.sh
+```
+
+You can use Docker Desktop instead of Podman if preferred.
 
 ## What Setup Does
 
