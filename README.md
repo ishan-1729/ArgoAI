@@ -11,6 +11,15 @@ ArgoAI is an OpenShift console plugin and API service that diagnoses broken Argo
 
 Do not commit API keys, cluster passwords, kubeconfigs, or generated runtime logs.
 
+## Quick Start
+
+After installing prerequisites and running `oc login`, use the one-click launcher for your OS:
+
+- Windows: double-click `start-windows.cmd`.
+- macOS: double-click `start-mac.command`, or run `chmod +x start-mac.command` once if macOS asks for permission.
+
+The launcher clones the Red Hat GitOps console plugin next to this repo if it is missing, starts the demo stack, waits for the local console, and opens `http://localhost:9000/argoai` in your browser.
+
 ## Windows
 
 Recommended: run the project commands from Git Bash, WSL, or another Bash-compatible shell. PowerShell is fine for `oc login` and checks, but `setup-demo.sh` expects Bash.

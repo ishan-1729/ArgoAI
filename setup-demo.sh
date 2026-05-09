@@ -80,6 +80,22 @@ wait_for_http() {
     log "${name} is ready."
 }
 
+open_local_ui() {
+    local url="$1"
+
+    if command -v powershell.exe >/dev/null 2>&1; then
+        powershell.exe -NoProfile -Command "Start-Process '$url'" >/dev/null 2>&1 || true
+    elif command -v cmd.exe >/dev/null 2>&1; then
+        cmd.exe /c start "" "$url" >/dev/null 2>&1 || true
+    elif command -v open >/dev/null 2>&1; then
+        open "$url" >/dev/null 2>&1 || true
+    elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$url" >/dev/null 2>&1 || true
+    else
+        warn "Could not auto-open a browser. Open ${url} manually."
+    fi
+}
+
 cleanup() {
     log "Shutting down services..."
     for pid in "$GO_PID" "$PYTHON_PID" "$PLUGIN_PID" "$GITOPS_PLUGIN_PID" "$CONSOLE_PID"; do
@@ -187,12 +203,12 @@ oc get pods -n default --no-headers 2>&1 | grep demo- | sed 's/^/  /'
 if [ ! -d "rag_data/vector_db" ]; then
     log "Step 4: Extracting RAG data..."
     mkdir -p rag_data
-    if command -v docker >/dev/null 2>&1; then
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
         CONTAINER_RUNTIME=${CONTAINER_RUNTIME:-docker}
-    elif command -v podman >/dev/null 2>&1; then
+    elif command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then
         CONTAINER_RUNTIME=${CONTAINER_RUNTIME:-podman}
     else
-        err "Neither docker nor podman is available for RAG extraction."
+        err "Neither docker nor podman is available and running for RAG extraction."
         exit 1
     fi
     RAG_DATA_MOUNT="${SCRIPT_DIR}/rag_data"
@@ -301,6 +317,9 @@ if [ "$NO_CONSOLE" = false ]; then
 
     wait_for_http "OpenShift console" "http://localhost:9000" "${CONSOLE_READY_TIMEOUT:-180}"
     info "Console UI: ${CYAN}http://localhost:9000${NC}"
+    if [ "${OPEN_UI:-false}" = "true" ]; then
+        open_local_ui "${ARGOAI_UI_URL:-http://localhost:9000/argoai}"
+    fi
 else
     log "Step 7: Skipping console (--no-console flag)."
 fi

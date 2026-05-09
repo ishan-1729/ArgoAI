@@ -21,6 +21,14 @@ set -e
 BRIDGE_K8S_AUTH_BEARER_TOKEN=$(oc whoami --show-token 2>/dev/null)
 BRIDGE_USER_SETTINGS_LOCATION="localstorage"
 
+USE_PODMAN=false
+USE_DOCKER=false
+if command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then
+    USE_PODMAN=true
+elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    USE_DOCKER=true
+fi
+
 detect_windows_podman_host() {
     if command -v ipconfig.exe >/dev/null 2>&1; then
         local gateway
@@ -52,15 +60,18 @@ detect_windows_podman_host() {
 
 PLUGIN_HOST="${CONSOLE_PLUGIN_HOST:-}"
 if [ -z "$PLUGIN_HOST" ]; then
-    if [ -x "$(command -v podman)" ]; then
+    if [ "$USE_PODMAN" = "true" ]; then
         if [ "$(uname -s)" = "Linux" ]; then
             PLUGIN_HOST="localhost"
         else
             PLUGIN_HOST="$(detect_windows_podman_host || true)"
             PLUGIN_HOST="${PLUGIN_HOST:-host.containers.internal}"
         fi
-    else
+    elif [ "$USE_DOCKER" = "true" ]; then
         PLUGIN_HOST="host.docker.internal"
+    else
+        echo "Neither podman nor docker is available and running."
+        exit 1
     fi
 fi
 
@@ -108,7 +119,7 @@ write_bridge_env_file() {
     } > "$BRIDGE_ENV_FILE"
 }
 
-if [ -x "$(command -v podman)" ]; then
+if [ "$USE_PODMAN" = "true" ]; then
     if [ "$(uname -s)" = "Linux" ]; then
         write_bridge_env_file
         podman run --platform linux/amd64 --pull always --rm --network=host \
@@ -120,9 +131,12 @@ if [ -x "$(command -v podman)" ]; then
             --env-file "$BRIDGE_ENV_FILE" \
             $CONSOLE_IMAGE
     fi
-else
+elif [ "$USE_DOCKER" = "true" ]; then
     write_bridge_env_file
     docker run --platform linux/amd64 --pull always --rm -p "$CONSOLE_PORT":9000 \
         --env-file "$BRIDGE_ENV_FILE" \
         $CONSOLE_IMAGE
+else
+    echo "Neither podman nor docker is available and running."
+    exit 1
 fi
