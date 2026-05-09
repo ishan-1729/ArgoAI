@@ -38,6 +38,7 @@ Recommended: run the project commands from Git Bash, WSL, or another Bash-compat
 
    ```powershell
    git clone https://github.com/ishan-1729/ArgoAI.git
+   git clone https://github.com/redhat-developer/gitops-console-plugin.git
    cd ArgoAI
    ```
 
@@ -84,6 +85,7 @@ Recommended: run the project commands from Git Bash, WSL, or another Bash-compat
 
    ```bash
    git clone https://github.com/ishan-1729/ArgoAI.git
+   git clone https://github.com/redhat-developer/gitops-console-plugin.git
    cd ArgoAI
    ```
 
@@ -109,6 +111,8 @@ Recommended: run the project commands from Git Bash, WSL, or another Bash-compat
 ## What Setup Does
 
 `setup-demo.sh` verifies the cluster login, installs/checks OpenShift GitOps, deploys seven intentionally broken demo apps, creates ArgoCD Application CRs, starts the Go service, starts the Python agent, starts the console plugins, and opens the local console stack on `localhost:9000`.
+
+For the richer GitOps navigation, clone `https://github.com/redhat-developer/gitops-console-plugin` next to the `ArgoAI` folder before running setup. The setup script auto-detects either `../gitops-console-plugin` or `./gitops-console-plugin`, starts it on port `9002`, and launches the console with `ENABLE_GITOPS_PLUGIN=true`. If your checkout is somewhere else, set `GITOPS_CONSOLE_PLUGIN_DIR=/path/to/gitops-console-plugin`.
 
 By default, the demo ArgoCD Applications point at `https://github.com/tzprograms/ArgoAI` with paths under `demo/`. For a fork, set `ARGOAI_DEMO_REPO_URL`, `ARGOAI_DEMO_TARGET_REVISION`, and optionally `ARGOAI_DEMO_PATH_PREFIX` before running `setup-demo.sh`.
 

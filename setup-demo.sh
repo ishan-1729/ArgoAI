@@ -31,6 +31,55 @@ warn() { echo -e "${YELLOW}[ArgoAI]${NC} $1"; }
 err()  { echo -e "${RED}[ArgoAI]${NC} $1"; }
 info() { echo -e "${CYAN}[ArgoAI]${NC} $1"; }
 
+find_gitops_plugin_dir() {
+    if [ -n "${GITOPS_CONSOLE_PLUGIN_DIR:-}" ]; then
+        if [ -d "$GITOPS_CONSOLE_PLUGIN_DIR" ]; then
+            (cd "$GITOPS_CONSOLE_PLUGIN_DIR" && pwd)
+            return 0
+        fi
+        return 1
+    fi
+
+    for candidate in "$SCRIPT_DIR/gitops-console-plugin" "$SCRIPT_DIR/../gitops-console-plugin"; do
+        if [ -d "$candidate" ]; then
+            (cd "$candidate" && pwd)
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+start_gitops_plugin() {
+    cd "$GITOPS_PLUGIN_DIR"
+
+    if [ -x "./node_modules/.bin/ts-node" ] && [ -f "./node_modules/webpack-cli/bin/cli.js" ]; then
+        PORT=9002 ./node_modules/.bin/ts-node -O '{"module":"commonjs"}' ./node_modules/webpack-cli/bin/cli.js serve --host 0.0.0.0 --port 9002
+    else
+        PORT=9002 yarn start --host 0.0.0.0 --port 9002
+    fi
+}
+
+wait_for_http() {
+    local name="$1"
+    local url="$2"
+    local timeout_seconds="${3:-300}"
+    local elapsed=0
+
+    log "Waiting for ${name}..."
+    until curl -fsS "$url" >/dev/null 2>&1; do
+        if [ "$elapsed" -ge "$timeout_seconds" ]; then
+            err "${name} did not become ready at ${url}"
+            exit 1
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+        printf "."
+    done
+    echo ""
+    log "${name} is ready."
+}
+
 cleanup() {
     log "Shutting down services..."
     for pid in "$GO_PID" "$PYTHON_PID" "$PLUGIN_PID" "$GITOPS_PLUGIN_PID" "$CONSOLE_PID"; do
@@ -146,7 +195,11 @@ if [ ! -d "rag_data/vector_db" ]; then
         err "Neither docker nor podman is available for RAG extraction."
         exit 1
     fi
-    "${CONTAINER_RUNTIME}" run --rm -v "${SCRIPT_DIR}/rag_data:/out" "${RAG_IMAGE:-quay.io/devtools_gitops/argocd_lightspeed_byok:v0.0.4}" cp -r /rag/vector_db /out/
+    RAG_DATA_MOUNT="${SCRIPT_DIR}/rag_data"
+    if command -v cygpath >/dev/null 2>&1; then
+        RAG_DATA_MOUNT="$(cygpath -m "$RAG_DATA_MOUNT")"
+    fi
+    MSYS_NO_PATHCONV=1 "${CONTAINER_RUNTIME}" run --rm -v "${RAG_DATA_MOUNT}:/out" "${RAG_IMAGE:-quay.io/devtools_gitops/argocd_lightspeed_byok:v0.0.4}" cp -r /rag/vector_db /out/
 else
     log "Step 4: RAG data already present, skipping extraction."
 fi
@@ -207,36 +260,46 @@ fi
 # ============================================================
 if [ "$NO_CONSOLE" = false ]; then
     log "Step 7: Starting console plugins..."
+    GITOPS_PLUGIN_DIR=""
+    if GITOPS_PLUGIN_DIR="$(find_gitops_plugin_dir)"; then
+        info "Using GitOps console plugin from ${GITOPS_PLUGIN_DIR}"
+    else
+        warn "gitops-console-plugin directory not found; clone https://github.com/redhat-developer/gitops-console-plugin next to ArgoAI or set GITOPS_CONSOLE_PLUGIN_DIR."
+    fi
 
     # Install deps if needed
     if [ ! -d "console-plugin/node_modules" ]; then
         (cd console-plugin && yarn install 2>&1 | tail -1)
     fi
-    if [ -d "gitops-console-plugin" ] && [ ! -d "gitops-console-plugin/node_modules" ]; then
-        (cd gitops-console-plugin && yarn install 2>&1 | tail -1)
+    if [ -n "$GITOPS_PLUGIN_DIR" ] && [ ! -d "$GITOPS_PLUGIN_DIR/node_modules" ]; then
+        (cd "$GITOPS_PLUGIN_DIR" && yarn install 2>&1 | tail -1)
     fi
 
     # Start ArgoAI plugin on 9001
-    (cd console-plugin && yarn start 2>/dev/null) &
+    (cd console-plugin && yarn start --host 0.0.0.0 2>/dev/null) &
     PLUGIN_PID=$!
 
-    if [ -d "gitops-console-plugin" ]; then
+    if [ -n "$GITOPS_PLUGIN_DIR" ]; then
         # Start GitOps plugin on 9002 when the optional plugin checkout is present.
-        (cd gitops-console-plugin && PORT=9002 yarn start --port 9002 2>/dev/null) &
+        (start_gitops_plugin 2>/dev/null) &
         GITOPS_PLUGIN_PID=$!
-    else
-        warn "gitops-console-plugin directory not found; starting only the ArgoAI console plugin."
     fi
 
-    log "Waiting for plugin servers to compile..."
-    sleep 15
+    wait_for_http "ArgoAI console plugin" "http://localhost:9001/plugin-manifest.json" "${PLUGIN_READY_TIMEOUT:-300}"
+    if [ -n "$GITOPS_PLUGIN_DIR" ]; then
+        wait_for_http "GitOps console plugin" "http://localhost:9002/plugin-manifest.json" "${GITOPS_PLUGIN_READY_TIMEOUT:-600}"
+    fi
 
     # Start console container
     log "Starting OpenShift Console container on :9000..."
-    (cd console-plugin && ./start-console.sh 2>&1) &
+    if [ -n "$GITOPS_PLUGIN_DIR" ]; then
+        (cd console-plugin && ENABLE_GITOPS_PLUGIN=true ./start-console.sh 2>&1) &
+    else
+        (cd console-plugin && ./start-console.sh 2>&1) &
+    fi
     CONSOLE_PID=$!
 
-    sleep 5
+    wait_for_http "OpenShift console" "http://localhost:9000" "${CONSOLE_READY_TIMEOUT:-180}"
     info "Console UI: ${CYAN}http://localhost:9000${NC}"
 else
     log "Step 7: Skipping console (--no-console flag)."
