@@ -1,0 +1,209 @@
+name: macOS smoke
+
+on:
+  push:
+    branches:
+      - ci/macos-smoke-*
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos-smoke:
+    name: macOS startup and plugin smoke
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    env:
+      UV_LINK_MODE: copy
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Runner info
+        run: |
+          sw_vers
+          uname -a
+          xcodebuild -version || true
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+          cache-dependency-path: console-plugin/yarn.lock
+
+      - name: Set up Yarn
+        run: npm install -g yarn@1.22.22
+
+      - name: Validate shell scripts and executable modes
+        run: |
+          set -euo pipefail
+          bash -n setup-demo.sh console-plugin/start-console.sh start-mac.command
+          test -x setup-demo.sh
+          test -x console-plugin/start-console.sh
+          test -x start-mac.command
+          git ls-files --stage setup-demo.sh console-plugin/start-console.sh start-mac.command
+
+      - name: Run backend tests
+        run: |
+          set -euo pipefail
+          go test ./...
+          uv run pytest agent/tests
+
+      - name: Build ArgoAI console plugin
+        working-directory: console-plugin
+        run: |
+          set -euo pipefail
+          yarn install --frozen-lockfile --network-timeout 120000
+          yarn build
+
+      - name: Clone Red Hat GitOps console plugin
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/redhat-developer/gitops-console-plugin.git ../gitops-console-plugin
+          node <<'NODE'
+          const plugin = require('../gitops-console-plugin/package.json');
+          if (plugin.consolePlugin?.name !== 'gitops-plugin') {
+            throw new Error(`Unexpected GitOps plugin name: ${plugin.consolePlugin?.name}`);
+          }
+
+          const extensions = require('./console-plugin/console-extensions.json');
+          const nav = extensions.find((extension) =>
+            extension.type === 'console.navigation/href' &&
+            extension.properties?.href === '/argoai'
+          );
+          if (!nav) {
+            throw new Error('ArgoAI navigation extension was not found');
+          }
+          if (nav.properties.section !== 'gitops-navigation-section') {
+            throw new Error(`ArgoAI nav section is ${nav.properties.section}`);
+          }
+          console.log('GitOps plugin name and ArgoAI nav section are compatible.');
+          NODE
+
+      - name: Install Red Hat GitOps console plugin dependencies
+        working-directory: ../gitops-console-plugin
+        run: yarn install --network-timeout 120000
+
+      - name: Start both console plugins and fetch manifests
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/argoai-macos-smoke
+
+          cleanup() {
+            kill "${ARGOAI_PLUGIN_PID:-}" "${GITOPS_PLUGIN_PID:-}" 2>/dev/null || true
+            echo "---- ArgoAI plugin log ----"
+            tail -n 120 /tmp/argoai-macos-smoke/argoai-plugin.log 2>/dev/null || true
+            echo "---- GitOps plugin log ----"
+            tail -n 120 /tmp/argoai-macos-smoke/gitops-plugin.log 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          (cd console-plugin && yarn start --host 127.0.0.1 > /tmp/argoai-macos-smoke/argoai-plugin.log 2>&1) &
+          ARGOAI_PLUGIN_PID=$!
+
+          (cd ../gitops-console-plugin && PORT=9002 ./node_modules/.bin/ts-node -O '{"module":"commonjs"}' ./node_modules/webpack-cli/bin/cli.js serve --host 127.0.0.1 --port 9002 > /tmp/argoai-macos-smoke/gitops-plugin.log 2>&1) &
+          GITOPS_PLUGIN_PID=$!
+
+          for item in \
+            "http://localhost:9001/plugin-manifest.json /tmp/argoai-macos-smoke/argoai-manifest.json" \
+            "http://localhost:9002/plugin-manifest.json /tmp/argoai-macos-smoke/gitops-manifest.json"; do
+            url="${item%% *}"
+            output="${item##* }"
+            echo "Waiting for $url"
+            for attempt in $(seq 1 180); do
+              if curl -fsS "$url" >"$output"; then
+                break
+              fi
+              sleep 2
+              if [ "$attempt" -eq 180 ]; then
+                echo "Timed out waiting for $url"
+                exit 1
+              fi
+            done
+          done
+
+          node <<'NODE'
+          const fs = require('fs');
+          const argo = JSON.parse(fs.readFileSync('/tmp/argoai-macos-smoke/argoai-manifest.json', 'utf8'));
+          const gitops = JSON.parse(fs.readFileSync('/tmp/argoai-macos-smoke/gitops-manifest.json', 'utf8'));
+          if (argo.name !== 'argocd-agent-plugin') {
+            throw new Error(`Unexpected ArgoAI plugin manifest name: ${argo.name}`);
+          }
+          if (gitops.name !== 'gitops-plugin') {
+            throw new Error(`Unexpected GitOps plugin manifest name: ${gitops.name}`);
+          }
+          console.log(`ArgoAI manifest OK: ${argo.name}`);
+          console.log(`GitOps manifest OK: ${gitops.name}`);
+          NODE
+
+      - name: Validate macOS console env wiring without cluster secrets
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/argoai-macos-smoke/fake-bin
+
+          cat >/tmp/argoai-macos-smoke/fake-bin/oc <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          if [ "${1:-}" = "whoami" ] && [ "${2:-}" = "--show-server" ]; then
+            echo "https://api.example.openshift.local:6443"
+            exit 0
+          fi
+          if [ "${1:-}" = "whoami" ] && [ "${2:-}" = "--show-token" ]; then
+            echo "fake-token"
+            exit 0
+          fi
+          if [ "${1:-}" = "whoami" ]; then
+            echo "cluster-admin"
+            exit 0
+          fi
+          exit 0
+          EOF
+
+          cat >/tmp/argoai-macos-smoke/fake-bin/podman <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          if [ "${1:-}" = "info" ]; then
+            exit 0
+          fi
+          if [ "${1:-}" = "run" ]; then
+            printf '%q ' "$@" >/tmp/argoai-macos-smoke/podman-run.args
+            while [ "$#" -gt 0 ]; do
+              if [ "$1" = "--env-file" ]; then
+                cp "$2" /tmp/argoai-macos-smoke/bridge.env
+                break
+              fi
+              shift
+            done
+            exit 0
+          fi
+          exit 0
+          EOF
+
+          chmod +x /tmp/argoai-macos-smoke/fake-bin/oc /tmp/argoai-macos-smoke/fake-bin/podman
+
+          PATH="/tmp/argoai-macos-smoke/fake-bin:$PATH" \
+            ENABLE_GITOPS_PLUGIN=true \
+            CONSOLE_IMAGE=example.invalid/openshift-console:test \
+            bash console-plugin/start-console.sh
+
+          cat /tmp/argoai-macos-smoke/bridge.env
+          grep -F "BRIDGE_PLUGINS=argocd-agent-plugin=http://host.containers.internal:9001,gitops-plugin=http://host.containers.internal:9002" /tmp/argoai-macos-smoke/bridge.env
