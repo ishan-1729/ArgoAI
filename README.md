@@ -20,6 +20,8 @@ Use the one-click launcher for your OS:
 
 The launcher clones the Red Hat GitOps console plugin next to this repo if it is missing, starts the demo stack, waits for the local console, and opens `http://localhost:9000/argoai` in your browser. On macOS, the launcher also installs missing local tools with Homebrew and prompts for `oc login` if you are not already logged into a cluster.
 
+On the first run, the Python agent downloads the embedding model used by RAG. That download is about 438 MB and can take several minutes on a fresh machine; later runs reuse `.cache/huggingface`.
+
 ## Windows
 
 Recommended: run the project commands from Git Bash, WSL, or another Bash-compatible shell. PowerShell is fine for `oc login` and checks, but `setup-demo.sh` expects Bash.
@@ -113,9 +115,19 @@ bash ./setup-demo.sh
 
 You can use Docker Desktop instead of Podman if preferred.
 
+If the Python service is still downloading the embedding model on a slow network, increase the wait:
+
+```bash
+PYTHON_READY_TIMEOUT=1200 bash ./setup-demo.sh
+```
+
+If Hugging Face warns about unauthenticated requests or rate limits, set `HF_TOKEN` in the same terminal before running setup.
+
 ## What Setup Does
 
 `setup-demo.sh` verifies the cluster login, installs/checks OpenShift GitOps, deploys seven intentionally broken demo apps, creates ArgoCD Application CRs, starts the Go service, starts the Python agent, starts the console plugins, and opens the local console stack on `localhost:9000`.
+
+The setup script stores downloaded embedding-model files in `.cache/huggingface`. Override this with `HF_CACHE_DIR=/path/to/cache` if you want to share the cache across checkouts.
 
 For the richer GitOps navigation, clone `https://github.com/redhat-developer/gitops-console-plugin` next to the `ArgoAI` folder before running setup. The setup script auto-detects either `../gitops-console-plugin` or `./gitops-console-plugin`, starts it on port `9002`, and launches the console with `ENABLE_GITOPS_PLUGIN=true`. If your checkout is somewhere else, set `GITOPS_CONSOLE_PLUGIN_DIR=/path/to/gitops-console-plugin`.
 

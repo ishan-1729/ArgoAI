@@ -215,7 +215,9 @@ if [ ! -d "rag_data/vector_db" ]; then
     if command -v cygpath >/dev/null 2>&1; then
         RAG_DATA_MOUNT="$(cygpath -m "$RAG_DATA_MOUNT")"
     fi
-    MSYS_NO_PATHCONV=1 "${CONTAINER_RUNTIME}" run --rm -v "${RAG_DATA_MOUNT}:/out" "${RAG_IMAGE:-quay.io/devtools_gitops/argocd_lightspeed_byok:v0.0.4}" cp -r /rag/vector_db /out/
+    RAG_IMAGE_PLATFORM="${RAG_IMAGE_PLATFORM:-linux/amd64}"
+    info "Using RAG extraction image platform: ${RAG_IMAGE_PLATFORM}"
+    MSYS_NO_PATHCONV=1 "${CONTAINER_RUNTIME}" run --platform "${RAG_IMAGE_PLATFORM}" --rm -v "${RAG_DATA_MOUNT}:/out" "${RAG_IMAGE:-quay.io/devtools_gitops/argocd_lightspeed_byok:v0.0.4}" cp -r /rag/vector_db /out/
 else
     log "Step 4: RAG data already present, skipping extraction."
 fi
@@ -242,19 +244,43 @@ fi
 # Step 6: Start Python agent service
 # ============================================================
 log "Step 6: Starting Python agent service on :8081..."
-TRANSFORMERS_CACHE=/tmp/hf_cache \
-HF_HOME=/tmp/hf_cache \
-SENTENCE_TRANSFORMERS_HOME=/tmp/hf_cache \
+HF_CACHE_DIR="${HF_CACHE_DIR:-${SCRIPT_DIR}/.cache/huggingface}"
+PYTHON_READY_TIMEOUT="${PYTHON_READY_TIMEOUT:-900}"
+case "$PYTHON_READY_TIMEOUT" in
+    ''|*[!0-9]*)
+        warn "Invalid PYTHON_READY_TIMEOUT='${PYTHON_READY_TIMEOUT}', using 900 seconds."
+        PYTHON_READY_TIMEOUT=900
+        ;;
+esac
+mkdir -p "$HF_CACHE_DIR"
+info "Hugging Face cache: ${HF_CACHE_DIR}"
+info "Python readiness timeout: ${PYTHON_READY_TIMEOUT}s"
+warn "First run may download the embedding model and can take several minutes."
+
+TRANSFORMERS_CACHE="$HF_CACHE_DIR" \
+HF_HOME="$HF_CACHE_DIR" \
+SENTENCE_TRANSFORMERS_HOME="$HF_CACHE_DIR" \
 RAG_INDEX_PATH=./rag_data/vector_db \
 uv run python -m agent.main &
 PYTHON_PID=$!
 
 log "Waiting for Python service to start (loading embedding model)..."
-for i in $(seq 1 60); do
+ELAPSED=0
+while true; do
     if curl -s http://localhost:8081/health 2>/dev/null | grep -q "ok"; then
         break
     fi
+    if ! kill -0 "$PYTHON_PID" >/dev/null 2>&1; then
+        err "Python service exited before becoming healthy."
+        exit 1
+    fi
+    if [ "$ELAPSED" -ge "$PYTHON_READY_TIMEOUT" ]; then
+        err "Python service did not become healthy within ${PYTHON_READY_TIMEOUT}s."
+        err "If this is a first run on a slow network, retry or set PYTHON_READY_TIMEOUT=1200 before running setup."
+        exit 1
+    fi
     sleep 2
+    ELAPSED=$((ELAPSED + 2))
     printf "."
 done
 echo ""

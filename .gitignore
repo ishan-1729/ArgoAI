@@ -58,6 +58,7 @@ logs/
 Thumbs.db
 
 # Cache
+.cache/
 .pytest_cache/
 .cursor/
 
