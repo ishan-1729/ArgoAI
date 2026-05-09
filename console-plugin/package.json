@@ -7,7 +7,7 @@
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "yarn clean && yarn ts-node node_modules/webpack-cli/bin/cli.js --mode production",
     "start": "yarn ts-node node_modules/webpack-cli/bin/cli.js serve",
-    "start-console": "./start-console.sh",
+    "start-console": "bash ./start-console.sh",
     "ts-node": "ts-node --project tsconfig.webpack.json",
     "lint": "eslint src/"
   },

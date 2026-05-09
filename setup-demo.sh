@@ -309,9 +309,9 @@ if [ "$NO_CONSOLE" = false ]; then
     # Start console container
     log "Starting OpenShift Console container on :9000..."
     if [ -n "$GITOPS_PLUGIN_DIR" ]; then
-        (cd console-plugin && ENABLE_GITOPS_PLUGIN=true ./start-console.sh 2>&1) &
+        (cd console-plugin && ENABLE_GITOPS_PLUGIN=true bash ./start-console.sh 2>&1) &
     else
-        (cd console-plugin && ./start-console.sh 2>&1) &
+        (cd console-plugin && bash ./start-console.sh 2>&1) &
     fi
     CONSOLE_PID=$!
 

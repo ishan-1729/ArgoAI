@@ -41,7 +41,7 @@ Recommended: run the project commands from Git Bash, WSL, or another Bash-compat
    podman machine start
    ```
 
-   Skip this if Docker Desktop is already running.
+   Skip this if Docker Desktop is already running. If Podman says the VM already exists or is already running, that is fine.
 
 3. Clone and enter the repo:
 
@@ -84,11 +84,11 @@ Recommended: run the project commands from Git Bash, WSL, or another Bash-compat
 2. Start your container runtime:
 
    ```bash
-   podman machine init
-   podman machine start
+   podman machine init 2>/dev/null || true
+   podman machine start 2>/dev/null || true
    ```
 
-   Skip this if Docker Desktop is already running.
+   Skip this if Docker Desktop is already running. If Podman says the VM already exists or is already running, that is fine.
 
 3. Clone and enter the repo:
 
